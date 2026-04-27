@@ -32,21 +32,29 @@ function setCors(res: ServerResponse): void {
 }
 
 const httpServer = createServer(async (req, res) => {
+  const reqId = Math.random().toString(36).slice(2, 8)
+  const authHdr = req.headers['authorization']
+  const authPreview = typeof authHdr === 'string' ? `${authHdr.slice(0, 14)}…(len=${authHdr.length})` : 'none'
+  console.log(`[${reqId}] ${req.method} ${req.url} origin=${req.headers.origin ?? '-'} ct=${req.headers['content-type'] ?? '-'} auth=${authPreview}`)
+
   setCors(res)
   if (req.method === 'OPTIONS') {
     res.writeHead(204)
+    console.log(`[${reqId}] -> 204 (CORS preflight)`)
     return res.end()
   }
 
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
 
   if (req.method === 'GET' && url.pathname === '/') {
+    console.log(`[${reqId}] -> 200 root`)
     return writeJson(res, 200, { name: 'bluedux.mcp', version: '0.0.0' })
   }
   if (req.method === 'GET' && url.pathname === '/healthz') {
     return writeJson(res, 200, { ok: true })
   }
   if (req.method === 'GET' && url.pathname === '/.well-known/oauth-protected-resource/mcp') {
+    console.log(`[${reqId}] -> 200 PRM`)
     return writeJson(res, 200, {
       resource: `${publicBase(req)}/mcp`,
       authorization_servers: [`https://${env.AUTH0_DOMAIN}`],
@@ -56,25 +64,30 @@ const httpServer = createServer(async (req, res) => {
   }
 
   if (url.pathname !== '/mcp') {
+    console.log(`[${reqId}] -> 404 (path=${url.pathname})`)
     return writeJson(res, 404, { error: 'not found' })
   }
 
   let user
   try {
     user = await verifyBearer(req.headers['authorization'])
+    console.log(`[${reqId}] auth ok sub=${user.sub} scopes=[${user.scopes.join(',')}]`)
   } catch (err) {
     const metadataUrl = `${publicBase(req)}/.well-known/oauth-protected-resource/mcp`
     res.setHeader(
       'WWW-Authenticate',
       `Bearer realm="bluedux.mcp", error="invalid_token", resource_metadata="${metadataUrl}"`,
     )
+    console.log(`[${reqId}] -> 401 auth fail: ${err instanceof Error ? err.message : String(err)}`)
     return writeJson(res, 401, { error: err instanceof AuthError ? err.message : 'invalid token' })
   }
 
   const api = new BlueduxApi(user.rawToken)
   try {
     await api.ensureProvisioned()
+    console.log(`[${reqId}] provision ok`)
   } catch (err) {
+    console.log(`[${reqId}] -> 502 provision fail: ${String(err)}`)
     return writeJson(res, 502, { error: 'provision failed', detail: String(err) })
   }
 
