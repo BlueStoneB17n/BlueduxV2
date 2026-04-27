@@ -58,7 +58,7 @@ const httpServer = createServer(async (req, res) => {
     return writeJson(res, 200, {
       resource: `${publicBase(req)}/mcp`,
       authorization_servers: [`https://${env.AUTH0_DOMAIN}`],
-      scopes_supported: ['read:files', 'write:files', 'delete:files'],
+      scopes_supported: ['openid', 'profile', 'email', 'read:files', 'write:files', 'delete:files'],
       bearer_methods_supported: ['header'],
     })
   }
