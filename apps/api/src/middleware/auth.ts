@@ -5,6 +5,8 @@ import { env } from '../env'
 const issuer = `https://${env.AUTH0_DOMAIN}/`
 const jwks = createRemoteJWKSet(new URL(`${issuer}.well-known/jwks.json`))
 
+const audiences: string[] = [env.AUTH0_AUDIENCE, 'https://mcp.bluedux.com/mcp']
+
 export interface AuthUser {
   sub: string
   scopes: string[]
@@ -20,7 +22,7 @@ export const requireAuth: MiddlewareHandler<{ Variables: { user: AuthUser } }> =
   try {
     const { payload } = await jwtVerify(token, jwks, {
       issuer,
-      audience: env.AUTH0_AUDIENCE,
+      audience: audiences,
     })
     if (typeof payload.sub !== 'string') {
       return c.json({ error: 'invalid token: missing sub' }, 401)
