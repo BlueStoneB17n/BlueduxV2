@@ -17,6 +17,12 @@ function writeJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
+function publicBase(req: IncomingMessage): string {
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http'
+  const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? 'localhost'
+  return `${proto}://${host}`
+}
+
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
 
@@ -25,6 +31,14 @@ const httpServer = createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/healthz') {
     return writeJson(res, 200, { ok: true })
+  }
+  if (req.method === 'GET' && url.pathname === '/.well-known/oauth-protected-resource/mcp') {
+    return writeJson(res, 200, {
+      resource: `${publicBase(req)}/mcp`,
+      authorization_servers: [`https://${env.AUTH0_DOMAIN}`],
+      scopes_supported: ['read:files', 'write:files', 'delete:files'],
+      bearer_methods_supported: ['header'],
+    })
   }
 
   if (url.pathname !== '/mcp') {
@@ -35,7 +49,11 @@ const httpServer = createServer(async (req, res) => {
   try {
     user = await verifyBearer(req.headers['authorization'])
   } catch (err) {
-    res.setHeader('WWW-Authenticate', 'Bearer realm="bluedux.mcp", error="invalid_token"')
+    const metadataUrl = `${publicBase(req)}/.well-known/oauth-protected-resource/mcp`
+    res.setHeader(
+      'WWW-Authenticate',
+      `Bearer realm="bluedux.mcp", error="invalid_token", resource_metadata="${metadataUrl}"`,
+    )
     return writeJson(res, 401, { error: err instanceof AuthError ? err.message : 'invalid token' })
   }
 
