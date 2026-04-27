@@ -1,4 +1,5 @@
 import { adminFetch, formatBytes, type AuditResponse } from '../../lib/api'
+import { DeleteUserButton } from './DeleteUserButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,11 +38,12 @@ export default async function UsersPage() {
                 <th>SSH key</th>
                 <th>Quota</th>
                 <th>Joined</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {data.users.length === 0 && (
-                <tr><td colSpan={7} className="muted">(no users)</td></tr>
+                <tr><td colSpan={8} className="muted">(no users)</td></tr>
               )}
               {data.users.map((u) => (
                 <tr key={u.id}>
@@ -52,6 +54,7 @@ export default async function UsersPage() {
                   <td>{u.sshPubkey ? '✓' : '—'}</td>
                   <td>{formatBytes(u.storageQuotaBytes)}</td>
                   <td className="muted">{new Date(u.createdAt).toLocaleString()}</td>
+                  <td><DeleteUserButton id={u.id} email={u.email} /></td>
                 </tr>
               ))}
             </tbody>

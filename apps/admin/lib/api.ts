@@ -1,9 +1,10 @@
 const apiBase = process.env['BLUEDUX_API_URL'] ?? 'http://localhost:8080'
 const adminToken = process.env['BLUEDUX_ADMIN_PASSWORD']
 
-export async function adminFetch<T>(path: string): Promise<T> {
+export async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${apiBase}${path}`, {
-    headers: { 'X-Admin-Token': adminToken ?? '' },
+    ...init,
+    headers: { 'X-Admin-Token': adminToken ?? '', ...(init.headers ?? {}) },
     cache: 'no-store',
   })
   if (!res.ok) {

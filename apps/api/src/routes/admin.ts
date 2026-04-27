@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { desc, eq, sql } from 'drizzle-orm'
 import { auditLog, users } from '@bluedux/db'
 import { db } from '../lib/db'
+import { sftpgo } from '../lib/sftpgo'
 import { env } from '../env'
 
 const adminRoutes = new Hono()
@@ -58,6 +59,31 @@ adminRoutes.get('/audit', async (c) => {
     users: userRows,
     fetchedAt: new Date().toISOString(),
   })
+})
+
+adminRoutes.delete('/users/:id', async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: 'invalid id' }, 400)
+  }
+  const user = await db.query.users.findFirst({ where: eq(users.id, id) })
+  if (!user) return c.json({ error: 'not found' }, 404)
+
+  const result: { sftpgo: 'deleted' | 'absent' | 'failed'; sftpgoError?: string } = { sftpgo: 'absent' }
+  if (user.sftpgoUsername) {
+    try {
+      await sftpgo.deleteUser(user.sftpgoUsername)
+      result.sftpgo = 'deleted'
+    } catch (err) {
+      result.sftpgo = 'failed'
+      result.sftpgoError = err instanceof Error ? err.message : String(err)
+    }
+  }
+
+  await db.delete(auditLog).where(eq(auditLog.userId, id))
+  await db.delete(users).where(eq(users.id, id))
+
+  return c.json({ ok: true, ...result })
 })
 
 export { adminRoutes }
