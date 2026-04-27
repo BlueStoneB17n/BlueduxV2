@@ -23,7 +23,21 @@ function publicBase(req: IncomingMessage): string {
   return `${proto}://${host}`
 }
 
+function setCors(res: ServerResponse): void {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version')
+  res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Mcp-Session-Id')
+  res.setHeader('Access-Control-Max-Age', '86400')
+}
+
 const httpServer = createServer(async (req, res) => {
+  setCors(res)
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204)
+    return res.end()
+  }
+
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
 
   if (req.method === 'GET' && url.pathname === '/') {
