@@ -28,12 +28,18 @@ meRoutes.post('/provision', async (c) => {
     return c.json({ ok: true, alreadyProvisioned: true, user: existing })
   }
 
-  const profile = await fetchUserInfo(u.rawToken)
-  if (!profile.email) {
-    return c.json({ error: 'auth0 userinfo missing email' }, 502)
+  let email = u.email
+  let name = u.name
+  if (!email) {
+    const profile = await fetchUserInfo(u.rawToken)
+    email = profile.email
+    name = profile.name
+  }
+  if (!email) {
+    return c.json({ error: 'no email available (token claims missing and userinfo failed)' }, 502)
   }
 
-  const username = profile.email
+  const username = email
   const homeDir = `${SFTPGO_DATA_ROOT}/${username}`
   const password = deriveSftpgoPassword(env.SFTPGO_USER_PASSWORD_KEY, u.sub)
 
@@ -42,7 +48,7 @@ meRoutes.post('/provision', async (c) => {
     await sftpgo.createUser({
       username,
       password,
-      email: profile.email,
+      email,
       homeDir,
       quotaSize: DEFAULT_QUOTA,
       description: 'Auto-provisioned via bluedux.api',
@@ -55,8 +61,8 @@ meRoutes.post('/provision', async (c) => {
     ? await db
         .update(users)
         .set({
-          email: profile.email,
-          name: profile.name ?? existing.name,
+          email,
+          name: name ?? existing.name,
           sftpgoUsername: username,
           updatedAt: new Date(),
         })
@@ -66,8 +72,8 @@ meRoutes.post('/provision', async (c) => {
         .insert(users)
         .values({
           auth0Sub: u.sub,
-          email: profile.email,
-          name: profile.name ?? null,
+          email,
+          name: name ?? null,
           sftpgoUsername: username,
           storageQuotaBytes: DEFAULT_QUOTA,
         })

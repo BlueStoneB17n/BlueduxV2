@@ -10,8 +10,13 @@ const audiences: string[] = [env.AUTH0_AUDIENCE, 'https://mcp.bluedux.com/mcp']
 export interface AuthUser {
   sub: string
   scopes: string[]
+  email?: string
+  name?: string
   rawToken: string
 }
+
+const EMAIL_CLAIM = 'https://bluedux.com/email'
+const NAME_CLAIM = 'https://bluedux.com/name'
 
 export const requireAuth: MiddlewareHandler<{ Variables: { user: AuthUser } }> = async (c, next) => {
   const header = c.req.header('Authorization')
@@ -28,11 +33,16 @@ export const requireAuth: MiddlewareHandler<{ Variables: { user: AuthUser } }> =
       return c.json({ error: 'invalid token: missing sub' }, 401)
     }
     const scopeStr = typeof payload['scope'] === 'string' ? payload['scope'] : ''
-    c.set('user', {
+    const emailClaim = payload[EMAIL_CLAIM]
+    const nameClaim = payload[NAME_CLAIM]
+    const user: AuthUser = {
       sub: payload.sub,
       scopes: scopeStr.split(' ').filter(Boolean),
       rawToken: token,
-    })
+    }
+    if (typeof emailClaim === 'string') user.email = emailClaim
+    if (typeof nameClaim === 'string') user.name = nameClaim
+    c.set('user', user)
     await next()
   } catch (err) {
     return c.json({ error: 'invalid token', detail: String(err) }, 401)
