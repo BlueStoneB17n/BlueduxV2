@@ -124,6 +124,11 @@ Tenant: `bluedux.us.auth0.com`（US, Development）
 | API `bluedux api` | Custom API | Identifier (audience) `https://api.bluedux.com`，RS256。5 scopes: `read:files write:files delete:files manage:keys read:profile` |
 | Connection `google-oauth2` | Social | 复用 GCP OAuth client（`449350223349-91vl1c0buo42ume2s9qmcnsf5dpm2cj2.apps.googleusercontent.com`），GCP 那边的 Authorized redirect URI 加了 `https://bluedux.us.auth0.com/login/callback` |
 
+Tenant-wide settings 用于支持 Claude.ai custom connector（DCR）：
+- **OIDC Dynamic Application Registration = ON**（Settings → Advanced）：让 Claude.ai 能自动注册 client
+- **Default Audience = `https://api.bluedux.com`**（Settings → General）：DCR client 的 `/authorize` 不显式传 audience 时仍拿到 API JWT
+- （按需）Post-Login Action `inject-mcp-scopes`：当 DCR client 请求 `read:files / write:files / delete:files` 时显式 `api.accessToken.addScope()`。MCP/API 当前不强校验 scope，所以非必需；只有 Claude.ai OAuth 流程因 scope grant 报错时才加
+
 ## 用户/客户端流程
 
 ### Web 登录
@@ -146,6 +151,13 @@ Tenant: `bluedux.us.auth0.com`（US, Development）
 3. 拿到用户 access_token，每次 MCP 请求带 `Authorization: Bearer <token>`
 4. bluedux-mcp JWKS 验证 → 调 bluedux.api（同样 Bearer）→ sftpgo
 
+#### Custom connector 模式（Claude.ai / Claude Code）
+1. 在 Claude.ai → Settings → Connectors → Add custom connector，URL = `https://bluedux-mcp-production.up.railway.app/mcp`
+2. Claude POST `/mcp` 无 token → MCP 返回 401 + `WWW-Authenticate` 含 `resource_metadata="…/.well-known/oauth-protected-resource/mcp"`
+3. Claude 拉 PRM → 拉 Auth0 OIDC discovery → POST `/oidc/register`（DCR）拿到 client_id
+4. 走 PKCE `/authorize` → 弹 Auth0 登录 → Continue with Google → 回 Claude，收 JWT（`aud=https://api.bluedux.com`）
+5. 之后每次 MCP 调用带 Bearer，复用现有 verifyBearer / api 链路
+
 ### Admin（运维）
 1. 浏览器访问 `https://bluedux-admin-production.up.railway.app`
 2. 弹 HTTP Basic Auth：username 任意，password = `BLUEDUX_ADMIN_PASSWORD`
@@ -167,6 +179,9 @@ Tenant: `bluedux.us.auth0.com`（US, Development）
 11. **Cloudflare 橙云 OK**：之前担心 CF cert 与 Railway cert 冲突，实测 SSL/TLS = Full (strict) 模式下两层 TLS 没问题；橙云顺带 CDN/DDoS。
 12. **sftpgo Volume 文件持久**：删用户账号不删 home_dir 文件；重建同名用户会复用旧目录（功能/bug 双面）。
 13. **sftpgo Event Manager rule 通过 `loaddata` 一次性 import**：`events-webhook.json` 不入仓库（gitignored，含 webhook secret），文档里描述清结构，import 后规则在 Postgres 里活到永远。
+14. **PRM endpoint 路径是 `/.well-known/oauth-protected-resource/mcp`**（路径后缀，RFC 9728），不是根路径。`resource` 字段必须等于 MCP server 自己的 origin URL（`https://bluedux-mcp-…/mcp`），**不能**写成 `https://api.bluedux.com`——MCP TS SDK 的 `checkResourceAllowed()` 严格按 origin 比对。
+15. **JWT `aud` 与 PRM `resource` 是两回事**：`aud=https://api.bluedux.com`（被 `apps/mcp/src/auth.ts` 和 `apps/api/src/middleware/auth.ts` 校验），`resource=https://bluedux-mcp-…/mcp`（只在 PRM 文档对外宣告，给 OAuth 客户端做路由）。
+16. **DCR-注册的 client 默认零 scope**：dashboard 没有"DCR 默认 scope"开关。Claude.ai 流程目前能跑通是因为 mcp/api 都不强校验 scope；如果某天 Auth0 因为 scope grant 拒绝授权，要写 Post-Login Action 在 `event.resource_server.identifier === 'https://api.bluedux.com'` 时 `api.accessToken.addScope()`。
 
 ## 验证清单
 
