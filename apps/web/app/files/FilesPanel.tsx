@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 
 interface DirEntry {
   name: string
-  size: number
+  size?: number
   mode: number
   last_modified: string
 }
 
-const isDir = (mode: number) => (mode & 0o040000) !== 0
+// sftpgo returns Go's os.FileMode where ModeDir is bit 31 (0x80000000),
+// not the POSIX S_IFDIR (0o40000) you'd expect from C.
+const isDir = (mode: number) => (mode & 0x80000000) !== 0
 
 export function FilesPanel({
   initialPath,
@@ -123,7 +125,7 @@ export function FilesPanel({
                     </a>
                   )}
                 </td>
-                <td>{dir ? '—' : `${entry.size} B`}</td>
+                <td>{dir ? '—' : `${entry.size ?? 0} B`}</td>
                 <td className="muted">{new Date(entry.last_modified).toLocaleString()}</td>
                 <td>
                   <button className="btn danger" onClick={() => onDelete(entry)} style={{ padding: '4px 10px' }}>

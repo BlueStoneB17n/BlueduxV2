@@ -125,22 +125,22 @@ export class SftpgoClient {
   }
 
   /**
-   * Recursively wipe everything under the user's home dir using the user's own token.
+   * Wipe everything under the user's home dir using the user's own token.
    * Best-effort — caller handles errors. Does NOT delete the user record itself.
+   * Uses /api/v2/user/dirs DELETE which internally calls RemoveAll (recursive)
+   * — works for both files and directories.
    */
   async purgeUserFiles(username: string, password: string): Promise<void> {
     const { token } = await this.userLogin(username, password)
-    await this.purgeDir(token, '/')
-  }
-
-  private async purgeDir(userToken: string, dir: string): Promise<void> {
-    const entries = await this.listFiles(userToken, dir)
+    const entries = await this.listFiles(token, '/')
     for (const e of entries) {
       if (e.name === '.' || e.name === '..') continue
-      const full = dir === '/' ? `/${e.name}` : `${dir}/${e.name}`
-      const isDir = (e.mode & 0o40000) !== 0
-      if (isDir) await this.purgeDir(userToken, full)
-      await this.deleteFileOrDir(userToken, full)
+      const target = `/${e.name}`
+      const res = await fetch(
+        `${this.opts.baseUrl}/api/v2/user/dirs?path=${encodeURIComponent(target)}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+      )
+      if (!res.ok && res.status !== 404) throw new SftpgoError(res.status, await res.text())
     }
   }
 
