@@ -3,6 +3,7 @@ import { desc, eq, sql } from 'drizzle-orm'
 import { auditLog, users } from '@bluedux/db'
 import { db } from '../lib/db'
 import { sftpgo } from '../lib/sftpgo'
+import { deriveSftpgoPassword } from '../lib/sftpgo-password'
 import { env } from '../env'
 
 const adminRoutes = new Hono()
@@ -69,8 +70,21 @@ adminRoutes.delete('/users/:id', async (c) => {
   const user = await db.query.users.findFirst({ where: eq(users.id, id) })
   if (!user) return c.json({ error: 'not found' }, 404)
 
-  const result: { sftpgo: 'deleted' | 'absent' | 'failed'; sftpgoError?: string } = { sftpgo: 'absent' }
+  const result: {
+    sftpgo: 'deleted' | 'absent' | 'failed'
+    sftpgoError?: string
+    filesPurged?: boolean
+    filesPurgeError?: string
+  } = { sftpgo: 'absent' }
   if (user.sftpgoUsername) {
+    try {
+      const password = deriveSftpgoPassword(env.SFTPGO_USER_PASSWORD_KEY, user.auth0Sub)
+      await sftpgo.purgeUserFiles(user.sftpgoUsername, password)
+      result.filesPurged = true
+    } catch (err) {
+      result.filesPurged = false
+      result.filesPurgeError = err instanceof Error ? err.message : String(err)
+    }
     try {
       await sftpgo.deleteUser(user.sftpgoUsername)
       result.sftpgo = 'deleted'
