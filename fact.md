@@ -6,22 +6,27 @@
 
 ## 整体架构
 
-```
-User browser ───────► bluedux.com (Next.js apps/web)
-                       │
-                       │ Auth0 (Google IdP)
-                       ▼
-                      Auth0 tenant: bluedux.us.auth0.com
-                       │
-User browser ─Bearer──► bluedux-api (Hono)
-SFTP client ──SSH key─► sftpgo  ────webhook────► bluedux-api ──► bluedux DB (audit_log)
-MCP client ─OAuth+PKCE► bluedux-mcp ─Bearer──► bluedux-api
-                       │
-                       └─admin token──► sftpgo (provision users / files)
+```mermaid
+flowchart TD
+  U[User browser] -->|Login| WEB[bluedux web<br/>Next.js]
+  U --> SFTPClient[SFTP client]
+  Agent[MCP client / AI agent] --> MCP[bluedux mcp]
+  Operator[Operator] -->|HTTP Basic Auth| ADMIN[bluedux admin<br/>Next.js]
 
-Operator ─Basic Auth──► bluedux-admin (Next.js) ─X-Admin-Token──► bluedux-api
-                                                                 │
-                                                                 └► bluedux DB
+  WEB -->|OIDC redirect| AUTH[Auth0<br/>bluedux.us.auth0.com]
+  MCP -->|OAuth Code+PKCE| AUTH
+  AUTH -->|Google social| Google[Google OAuth]
+
+  WEB -->|Bearer| API[bluedux api<br/>Hono]
+  MCP -->|Bearer| API
+  ADMIN -->|X-Admin-Token| API
+
+  API -->|JWKS verify| AUTH
+  API --> DB[(Bluedux DB<br/>users + audit_log)]
+  API -->|admin token| SFTPGo[sftpgo]
+  SFTPClient -->|username + SSH pubkey| SFTPGo
+  SFTPGo --> Storage[(Volume storage)]
+  SFTPGo -->|fs event webhook| API
 ```
 
 ## Railway services（project: `bluedux`）
@@ -173,13 +178,3 @@ Tenant: `bluedux.us.auth0.com`（US, Development）
 - [ ] SFTP 上传文件 → web 能看到 → admin `/audit` 有新 row
 - [ ] MCP Inspector / Claude Desktop 连 `https://bluedux-mcp-production.up.railway.app/mcp` → OAuth → list_files
 - [ ] `https://bluedux-admin-production.up.railway.app` Basic Auth 进入 → 看到 audit + users
-
-## TODO（生产化 / 后续迭代）
-
-- 把 `admin/noneed` 换成长随机密码 + 单独 service-account admin 给 bluedux-api 用
-- 自定义域名：`mcp.bluedux.com`（CNAME → bluedux-mcp）+ `admin.bluedux.com`（CNAME → bluedux-admin）
-- file_versions / signatures / proof 等数据 model（plan 里定的"完整图"功能）
-- 限流 + DDoS 防护（Cloudflare 已经一部分；可加 Auth0 brute-force protection、sftpgo defender）
-- Sentry / OTel observability 接入
-- CI/CD（GitHub Actions: typecheck + build + railway up on merge）
-- 删 Railway 上的孤儿 volume `bluedux-server-volume` / `pocketbase-volume`

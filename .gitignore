@@ -33,3 +33,6 @@ dist/
 # Auth0 credential notes (tenant domain + client IDs/secrets)
 auth0.md
 
+# Per-developer Claude Code session memo (each contributor maintains their own)
+CLAUDE.md
+
