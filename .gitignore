@@ -9,6 +9,27 @@ sftpgo/
 
 # sftpgo runtime data dump - imported once via /api/v2/loaddata, lives in Postgres after that
 deploy/sftpgo-railway/events-bootstrap.json
+deploy/sftpgo-railway/events-webhook.json
 
 # mise tool versions are environment-specific to this machine
 mise.toml
+
+# Node / pnpm
+node_modules/
+.next/
+.turbo/
+dist/
+*.tsbuildinfo
+*.log
+
+# Drizzle migrations cache
+.drizzle/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Auth0 credential notes (tenant domain + client IDs/secrets)
+auth0.md
+
