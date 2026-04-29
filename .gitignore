@@ -30,8 +30,9 @@ dist/
 .env.local
 .env.*.local
 
-# Auth0 credential notes (tenant domain + client IDs/secrets)
-auth0.md
+# Auth0 credential notes (tenant domain + client IDs/secrets) — ROOT only.
+# fact/auth0.md is configuration docs without credentials, do commit it.
+/auth0.md
 
 # Per-developer Claude Code session memo (each contributor maintains their own)
 CLAUDE.md
