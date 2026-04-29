@@ -118,7 +118,7 @@ BlueduxV2/
 │   ├── db/                 Drizzle schema (users + audit_log) + migrations + client factory
 │   └── sftpgo-client/      sftpgo HTTP API 类型化 client
 ├── deploy/
-│   └── sftpgo-railway/     sftpgo Dockerfile + railway.json + 历史 DEPLOY.md（sftpgo 专属）
+│   └── sftpgo-railway/     sftpgo Dockerfile + railway.json + events-webhook.json (gitignored)
 ├── pnpm-workspace.yaml
 ├── package.json (root)
 ├── tsconfig.base.json
@@ -246,7 +246,7 @@ exports.onExecutePostLogin = async (event, api) => {
 1. **`RAILWAY_DOCKERFILE_PATH` 是关键**：单 monorepo 多 service，每个 service 设 env var 指向自家 Dockerfile，root dir 都用 `/`（仓库根），让 workspace symlink 跨 package 可达。
 2. **`pnpm deploy --prod` 输出 self-contained 目录**：runtime 镜像直接拷这个产物。否则 lockfile 不匹配 + symlink 失效。
 3. **tsup `noExternal: [/^@bluedux\//]`**：把 workspace 包内联进 bundle，否则 runtime 会尝试 import `.ts` 源码（Node 22 不支持 node_modules 里 strip TS types）。
-4. **Auth0 access_token 不含 email/name claim**：profile claims 在 id_token 或 `/userinfo` endpoint。`bluedux-api` 的 provision 流程必须调 `https://${AUTH0_DOMAIN}/userinfo` with Bearer 拿 email。
+4. **Auth0 access_token 默认不含 email/name claim**：profile claims 在 id_token 或 `/userinfo` endpoint。`bluedux-api` 的 provision 走双路径：先看 JWT 里 namespaced custom claim `https://bluedux.com/email`（MCP 路径靠 Action 注入），没有再 fallback 调 `/userinfo`（web 路径有 `openid` scope，能拿到）。Claude.ai 不传 `openid`，所以 MCP 路径必须靠 custom claim 兜住——见踩坑 #20。
 5. **Auth0 web app 必须 Authorize `bluedux api`**：默认是 OFF，登录会以 `Client xxx is not authorized to access resource server` 失败。
 6. **Auth0 SDK v4 路由是 `/auth/login`**：不是 v3 的 `/api/auth/login`。
 7. **sftpgo username = email**：`@`、`.` 在 Linux 文件名合法。sftpgo 默认 `naming_rules` 允许 email。
@@ -254,7 +254,7 @@ exports.onExecutePostLogin = async (event, api) => {
 9. **Railway internal DNS**：`<service>.railway.internal` 同 project 同 environment 内可达，免出网费 + 更快。
 10. **GCP OAuth client 共用**：原 sftpgo OIDC 用的 GCP OAuth client 现在被 Auth0 复用，redirect URI 加了 Auth0 那条；JavaScript origins **不要**加 callback URL（那是给 SPA 用的）。
 11. **Cloudflare 橙云 OK**：之前担心 CF cert 与 Railway cert 冲突，实测 SSL/TLS = Full (strict) 模式下两层 TLS 没问题；橙云顺带 CDN/DDoS。
-12. **sftpgo Volume 文件持久**：删用户账号不删 home_dir 文件；重建同名用户会复用旧目录（功能/bug 双面）。
+12. **sftpgo Volume 文件持久**：删用户账号不删 home_dir 文件；重建同名用户会复用旧目录。具体操作流程见踩坑 #23（admin 删用户先用用户身份 RemoveAll 再删账号）。
 13. **sftpgo Event Manager rule 通过 `loaddata` 一次性 import**：`events-webhook.json` 不入仓库（gitignored，含 webhook secret），文档里描述清结构，import 后规则在 Postgres 里活到永远。
 14. **PRM endpoint 路径是 `/.well-known/oauth-protected-resource/mcp`**（路径段后缀跟 resource 路径，RFC 9728），不是根路径 `/.well-known/oauth-protected-resource`。MCP TS SDK 的 `getOAuthProtectedResourceMetadataUrl()` 严格按这个规则拼。
 15. **PRM `resource` 必须等于 MCP server 自己的 origin URL**（当前是 `https://mcp.bluedux.com/mcp`），**不能**为了图省事写成 audience。MCP SDK 的 `checkResourceAllowed()` 按 `requested.origin === configured.origin && requestedPath.startsWith(configuredPath)` 校验。
