@@ -94,7 +94,16 @@ flowchart TD
 | `PORT` | `3001` |  |
 
 ### sftpgo
-（详见 `deploy/sftpgo-railway/DEPLOY.md` —— 那份是 sftpgo 单独部署的历史文档；本期改动：删了 OIDC 8 个 env vars，添加了 events-webhook event rule via loaddata）
+镜像构建：`deploy/sftpgo-railway/Dockerfile`（基于 `drakkan/sftpgo:alpine`，`USER 0:0`，启动时 `chmod 0777 /srv/sftpgo/data`）。Railway 用 `deploy/sftpgo-railway/railway.json` 指定 builder。
+
+关键 env vars：
+- `SFTPGO_DATA_PROVIDER__*` 系列：连 Postgres `railway` database
+- `SFTPGO_DATA_PROVIDER__USERS_BASE_DIR=/srv/sftpgo/data`、`BACKUPS_PATH=/srv/sftpgo/data/backups`
+- `SFTPGO_HTTPD__BINDINGS__0__CLIENT_IP_PROXY_HEADER=X-Forwarded-For`、`PROXY_ALLOWED=0.0.0.0/0,::/0`、`PROXY_MODE=0`、`SFTPGO_HTTPD__TOKEN_VALIDATION=1`（关掉 JWT 跟 IP 绑定，否则 Railway 反代换 IP 后所有 token 失效）
+- 默认 admin：`SFTPGO_DEFAULT_ADMIN_USERNAME=admin` / `SFTPGO_DEFAULT_ADMIN_PASSWORD=noneed`（MVP，**生产前换**）
+- **不再有** OIDC env vars（migration 时全部删了，现在所有用户认证由 bluedux web/mcp 走 Auth0 完成，sftpgo 只看用户名密码 + SSH key）
+
+Event Manager rule（sftpgo → bluedux.api fs event webhook）：通过 `deploy/sftpgo-railway/events-webhook.json` 一次性 `POST /api/v2/loaddata?mode=0` 导入到 Postgres，规则永久生效。文件 gitignored（含 webhook secret），现场重建时按 `apps/api/src/routes/webhooks.ts` 期望的 payload shape 配。
 
 ## 仓库结构（pnpm monorepo）
 
