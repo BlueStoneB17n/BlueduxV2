@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { users } from '@bluedux/db'
+import { SftpgoError } from '@bluedux/sftpgo-client'
 import { requireAuth, type AuthUser } from '../middleware/auth'
 import { db } from '../lib/db'
 import { sftpgo } from '../lib/sftpgo'
@@ -25,8 +26,15 @@ filesRoutes.get('/', async (c) => {
   if (!ctx) return c.json({ error: 'not provisioned' }, 409)
 
   const path = c.req.query('path') ?? '/'
-  const entries = await sftpgo.listFiles(ctx.userToken, path)
-  return c.json({ path, entries })
+  try {
+    const entries = await sftpgo.listFiles(ctx.userToken, path)
+    return c.json({ path, entries })
+  } catch (err) {
+    if (err instanceof SftpgoError && err.status === 404) {
+      return c.json({ path, entries: [] }) // 目录尚未创建 → 列为空
+    }
+    throw err // 真正的错误(5xx 等)照旧抛出
+  }
 })
 
 filesRoutes.get('/download', async (c) => {
